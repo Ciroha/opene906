@@ -103,14 +103,14 @@ assign icache_tag_bwen[46:0] = {  {2*(22-`I_TAG_TAG_WIDTH){1'b0}},
                                {(`I_TAG_TAG_WIDTH+1){icache_tag_wen[0]}}   //way0
                               };
 assign icache_tag_dout[46:0] = {  
-                  icache_tag_dout_raw[2*`I_TAG_TAG_WIDTH+2:2*`I_TAG_TAG_WIDTH+1],
+                  icache_tag_dout_raw[2*`I_TAG_TAG_WIDTH+2:2*`I_TAG_TAG_WIDTH+1], //fifo way1_vld
                   {(22-`I_TAG_TAG_WIDTH){1'b0}},
-                  icache_tag_dout_raw[2*`I_TAG_TAG_WIDTH:`I_TAG_TAG_WIDTH],
+                  icache_tag_dout_raw[2*`I_TAG_TAG_WIDTH:`I_TAG_TAG_WIDTH], //way1_dout way0_vld
                   {(22-`I_TAG_TAG_WIDTH){1'b0}},
-                  icache_tag_dout_raw[`I_TAG_TAG_WIDTH-1:0]
+                  icache_tag_dout_raw[`I_TAG_TAG_WIDTH-1:0] //way0_dout
                               };
 
-assign icache_tag_dout_raw[46:2*`I_TAG_TAG_WIDTH+3] = {(44-2*`I_TAG_TAG_WIDTH){1'b0}};
+assign icache_tag_dout_raw[46:2*`I_TAG_TAG_WIDTH+3] = {(44-2*`I_TAG_TAG_WIDTH){1'b0}};  //高位设为0
 assign icache_tag_din_fin[46:2*`I_TAG_TAG_WIDTH+3]  = {(44-2*`I_TAG_TAG_WIDTH){1'b0}};
 `endif
 //csky vperl_on

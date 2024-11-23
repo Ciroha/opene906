@@ -480,23 +480,24 @@ assign refill_tag_wr = refill_icache_req &
                           (refill_icache_done | refill_icache_init);
 assign refill_tag_wen[2:0] = {3{refill_tag_wr}} & {refill_icache_init, 
                                                    icache_refill_fifo,
-                                                  ~icache_refill_fifo};
+                                                  ~icache_refill_fifo}; //2:fifo 1:way1 0:way0
 assign refill_tag_din[46:0] = {~refill_icache_fifo,
                                refill_icache_done, refill_icache_addr[31:10],
-                               refill_icache_done, refill_icache_addr[31:10]};
+                               refill_icache_done, refill_icache_addr[31:10]};  //fifo way1_vld way1_out way0_vld way0_out
 
+//invalidate cache消除cache逻辑
 assign refill_inv_tag_req       = refill_tag_wr | icache_inv_req;
 assign refill_inv_tag_wen[2:0]  = icache_inv_req ? icache_inv_wen[2:0]
                                                  : refill_tag_wen[2:0];
 assign refill_inv_tag_idx[9:0]  = icache_inv_req ? icache_inv_idx[9:0]
-                                                 : refill_icache_addr[14:5];
+                                                 : refill_icache_addr[14:5];  //tag_idx最多可索引1024个表项
 assign refill_inv_tag_din[46:0] = icache_inv_req ? icache_inv_din[46:0]
                                                  : refill_tag_din[46:0];
 
 assign icache_wr_data_req       = refill_icache_req;
 assign icache_wr_data_idx[12:0] = refill_icache_addr[14:2];
 
-// c. I-Cache Tag hit buffer
+// c. I-Cache Tag hit buffer    tag命中缓冲器，保存最近一次Icache命中标签的结果和路信息
 // Tag Hit Buffer for cache memory low power
 // including buffer valid, hit tag, hit way
 // Instance ICG
@@ -526,9 +527,11 @@ assign buf_hit_upd = icache_rd_vld & ~direct_sel
                  & (icache_way1_hit | icache_way0_hit);
 
 // buf update when refill last or hit valid
+//缓冲只有在refill结束或者是tag hit时需要更新
 assign buf_upd_en = buf_rfl_upd | buf_hit_upd;
 
 // buf clear when refill first req or invalid one req or invalid all last
+//在有回填请求的时候或收到来自cp0的Icache无效请求，会清空缓存
 assign buf_clr_en = refill_icache_req & refill_icache_init | cp0_ifu_icache_inv_req;
 
 
@@ -574,6 +577,7 @@ end
 
 assign addr_equal   = pcgen_ifetch_seq_addr[31:5] == buf_hit_tag[26:0];
 
+//如果buf hit，则不需要再及进行tag的比对，直接取出该Icache的data，减少了访问tag array的消耗
 assign cen_mask_vld = tag_hit_vld & addr_equal & ~pcgen_ifetch_chgflw_vld & ~buf_upd_en;
 
 // d. I-Cache Request
@@ -591,9 +595,9 @@ assign icache_tag_din[46:0] = refill_inv_tag_din[46:0];
 assign icache_data_cen[1:0] = {(cen_mask_vld ?  buf_hit_way : icache_rd_req_data)
                             | icache_data_wen[1],
                                (cen_mask_vld ? ~buf_hit_way : icache_rd_req_data)
-                            | icache_data_wen[0]};
+                            | icache_data_wen[0]};  //如果tag buf比对成功就不需要再从tag array中取值了
 assign icache_data_wen[1:0] = {icache_wr_data_req &  icache_refill_fifo,
-                               icache_wr_data_req & ~icache_refill_fifo};
+                               icache_wr_data_req & ~icache_refill_fifo}; //icache data array的写信号，会根据refill fifo切换
 assign icache_data_idx[12:0] = icache_rd_req_data ? icache_rd_data_idx[12:0]
                                              : icache_wr_data_idx[12:0];
 assign icache_data_din[31:0] = refill_icache_data[31:0];
@@ -637,7 +641,7 @@ pa_ifu_icache_data_array  x_pa_ifu_icache_data_array (
 // d. Cache Miss Generation
 //------------------------------------------------
 
-// a. Cache Tag and Data output
+// a. Cache Tag and Data output  |tag信息初始化
 assign icache_tag_fifo            = icache_tag_dout[46];
 assign icache_tag_way1_vld        = icache_tag_dout[45];
 assign icache_tag_way1_dout[21:0] = icache_tag_dout[44:23];
@@ -1012,7 +1016,7 @@ parameter INV_WRTE = 2'b10;
 parameter INV_READ = 2'b01;
 parameter INV_FLOP = 2'b11;
 
-// Invalid FSM, for Array Invalid
+// Invalid FSM, for Array Invalid 将cache有效位清除
 // IDLE: default state
 // WRTE: invalid iteration state
 always @ (posedge icache_inv_clk or negedge cpurst_b)
