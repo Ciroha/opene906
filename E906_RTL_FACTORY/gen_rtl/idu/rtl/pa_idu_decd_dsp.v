@@ -204,7 +204,7 @@ output  [4 :0]  decd_split_rs2_idx;
 output          decd_split_rs2_vld;    
 
 // &Regs; @28
-reg     [19:0]  decd_func;             
+reg     [19:0]  decd_func;             //使用统一的功能码，可以提高拓展性
 reg             decd_ill_expt32;       
 reg     [31:0]  decd_imm1;             
 reg             decd_imm1_vld;         
@@ -397,9 +397,9 @@ parameter FUNC_WIDTH = 20;
 //--------------------ISA Sel define----------------
 parameter RV32IM = 5'b00001;
 parameter RV32C  = 5'b00010;
-parameter RV32X  = 5'b00100;
-parameter RV32P  = 5'b01000;
-parameter RV32FD = 5'b10000;
+parameter RV32X  = 5'b00100;  //自定义拓展
+parameter RV32P  = 5'b01000;  //针对DSP的拓展，支持SIMD指令
+parameter RV32FD = 5'b10000;  //浮点拓展
 
 //--------------------Inst Unit define--------------
 parameter ALU = 6'b000001;
@@ -440,7 +440,7 @@ assign decd_isa_sel[2] = decd_rv32x_op_vld;
 assign decd_isa_sel[3] = decd_rv32p_op_vld;
 assign decd_isa_sel[4] = decd_rv32fd_op_vld;
 
-// RV32IM--2.1 Integer Pack, Mult & Div Pack
+// RV32IM--2.1 Integer Pack, Mult & Div Pack  |包括了I/M/A指令集
 // &Instance("pa_idu_decd_rv32im"); @86
 pa_idu_decd_rv32im  x_pa_idu_decd_rv32im (
   .decd_func3           (decd_func3          ),
@@ -528,7 +528,7 @@ pa_idu_decd_rv32fd  x_pa_idu_decd_rv32fd (
 
 
 //==========================================================
-// Unit Sel, Func and ill expt
+// Unit Sel, Func and ill expt  |进行使用单元的选择以及功能码的替换
 //==========================================================
 // &CombBeg; @114
 always @( decd_rv32x_sel[5:0]

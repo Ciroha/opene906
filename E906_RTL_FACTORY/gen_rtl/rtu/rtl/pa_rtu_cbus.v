@@ -574,7 +574,7 @@ begin
 end
 
 //----------------------------------------------------------
-//                   Tail Inst and Int
+//                   Tail Inst and Int  |中断咬尾相关检测
 //----------------------------------------------------------
 //if spec inst generate exception, pending this exception
 //and take no action when retire

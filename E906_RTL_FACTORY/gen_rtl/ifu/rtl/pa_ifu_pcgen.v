@@ -71,7 +71,7 @@ module pa_ifu_pcgen(
 
 // &Ports; @24
 input   [31:0]  btb_pcgen_tar_pc;         
-input           btb_xx_chgflw_vld;        
+input           btb_xx_chgflw_vld;        //来自分支目标缓冲的指令流改变信号
 input           cp0_ifu_icg_en;           
 input           cp0_yy_clk_en;            
 input           cpurst_b;                 
@@ -79,7 +79,7 @@ input           ctrl_pcgen_inst_vld;
 input           ctrl_pcgen_pipedown;      
 input           forever_cpuclk;           
 input   [31:0]  id_pred_pcgen_chgflw_pc;  
-input           id_pred_pcgen_chgflw_vld; 
+input           id_pred_pcgen_chgflw_vld; //来自id阶段的指令预测模块的指令流改变信号
 input           id_pred_pcgen_inst_vld;   
 input   [31:0]  ifetch_pcgen_addr;        
 input   [31:0]  ifetch_pcgen_data;        
@@ -93,10 +93,10 @@ input           iu_ifu_tar_pc_vld;
 input           iu_ifu_tar_pc_vld_gate;   
 input           pad_yy_icg_scan_en;       
 input   [31:0]  rtu_ifu_chgflw_pc;        
-input           rtu_ifu_chgflw_vld;       
+input           rtu_ifu_chgflw_vld;       //退休单元的指令流更改
 input           rtu_ifu_flush_fe;         
 input   [31:0]  sysio_ifu_rst_addr;       
-input           vec_pcgen_chgflw_vld;     
+input           vec_pcgen_chgflw_vld;     //来自vec模块的指令流更改
 input           vec_pcgen_idle;           
 input           vec_pcgen_inst_fetch;     
 input           vec_pcgen_iu_chgflw;      
@@ -117,7 +117,7 @@ output  [31:0]  pcgen_id_pred_idpc;
 output  [31:0]  pcgen_id_pred_ifpc;       
 output  [31:0]  pcgen_ifetch_addr;        
 output          pcgen_ifetch_chgflw_vld;  
-output  [31:0]  pcgen_ifetch_ifpc;        
+output  [31:0]  pcgen_ifetch_ifpc;        //保留的IF阶段的PC值
 output  [31:0]  pcgen_ifetch_seq_addr;    
 output          pcgen_ipack_chgflw_vld;   
 output          pcgen_top_btb_tar_vld;    
@@ -126,11 +126,11 @@ output          pcgen_top_buf_chgflw;
 // &Regs; @25
 reg     [31:0]  btb_tar_pc;               
 reg             btb_tar_vld;              
-reg     [31:0]  pcgen_addr;               
-reg             pcgen_buf_chgflw;         
-reg     [31:0]  pcgen_delay_pc;           
+reg     [31:0]  pcgen_addr;               //寄存器信号，存储和更新当前的PC值
+reg             pcgen_buf_chgflw;         //缓冲的改变指令流请求
+reg     [31:0]  pcgen_delay_pc;           //指令冲刷情况下对应的pc地址
 reg     [31:0]  pcgen_idpc;               
-reg     [31:0]  pcgen_ifpc;               
+reg     [31:0]  pcgen_ifpc;               //指令获取单元的pc地址值
 reg     [31:0]  pcgen_pc;                 
 
 // &Wires; @26
@@ -171,7 +171,7 @@ wire            pcgen_chgflw_vld_gate;
 wire            pcgen_cpuclk;             
 wire            pcgen_ctrl_chgflw_vld;    
 wire    [31:0]  pcgen_fetch_pc;           
-wire            pcgen_flush_vld;          
+wire            pcgen_flush_vld;          //指令冲刷有效，包括从退休单元、中断、执行单元传来的冲刷信号
 wire            pcgen_ibuf_chgflw_vld;    
 wire            pcgen_icg_en;             
 wire    [31:0]  pcgen_id_pred_btb_tar_pc; 
@@ -276,7 +276,7 @@ gated_clk_cell  x_ifu_pcgen_idpc_icg_cell (
 
 //------------------------------------------------
 // 2. Judge the priority of PC sources
-// HAD > Vector > BJU > RAS > BHT > BTB > Inc
+// HAD > Vector > BJU > RAS > BHT > BTB > Inc |PC的优先级,硬件大于中断大于分支跳转大于RAS大于BHT大于BTB大于自增
 // Todo: Parallel Case?
 //------------------------------------------------
 // &CombBeg; @78
@@ -287,14 +287,15 @@ always @( vec_pcgen_tar_pc[31:0]
        or rtu_ifu_chgflw_vld)
 begin
   if(vec_pcgen_chgflw_vld)
-    pcgen_delay_pc[31:0] = vec_pcgen_tar_pc[31:0];
+    pcgen_delay_pc[31:0] = vec_pcgen_tar_pc[31:0];//中断的目标地址
   else if(rtu_ifu_chgflw_vld)
-    pcgen_delay_pc[31:0] = rtu_ifu_chgflw_pc[31:0];
+    pcgen_delay_pc[31:0] = rtu_ifu_chgflw_pc[31:0];//分支预测失误/异常的处理
   else// if(iu_ifu_tar_pc_vld)
-    pcgen_delay_pc[31:0] = iu_ifu_tar_pc[31:0];
+    pcgen_delay_pc[31:0] = iu_ifu_tar_pc[31:0];//执行单元的分支跳转相关指令
 // &CombEnd; @85
 end
 
+//整体上分支预测是先从btb获取结果，然后和id_pred的结果进行比较，不一致需要对btb中的结果进行修改并更改指令流
 // &CombBeg; @87
 always @( id_pred_pcgen_chgflw_pc[31:0]
        or id_pred_pcgen_chgflw_vld
@@ -307,17 +308,17 @@ begin
   if(pcgen_buf_chgflw)
     pcgen_pc[31:0] = pcgen_ifpc[31:0];
   else if(id_pred_pcgen_chgflw_vld)
-    pcgen_pc[31:0] = id_pred_pcgen_chgflw_pc[31:0];
+    pcgen_pc[31:0] = id_pred_pcgen_chgflw_pc[31:0];//id阶段的分支预测结果
   else if(btb_xx_chgflw_vld)
-    pcgen_pc[31:0] = btb_pcgen_tar_pc[31:0];
+    pcgen_pc[31:0] = btb_pcgen_tar_pc[31:0];//命中btb直接跳转
   else
-    pcgen_pc[31:0] = pcgen_addr[31:0];
+    pcgen_pc[31:0] = pcgen_addr[31:0];//正常情况下，pcgen的pc值为pcgen_addr
 // &CombEnd; @96
 end
 
 assign pcgen_flush_vld  = rtu_ifu_chgflw_vld
                        | vec_pcgen_chgflw_vld
-                       | iu_ifu_tar_pc_vld;
+                       | iu_ifu_tar_pc_vld;//一些需要进行冲刷的请求
 assign pcgen_chgflw_vld = pcgen_flush_vld
                        | id_pred_pcgen_chgflw_vld
                        | btb_xx_chgflw_vld;
@@ -331,43 +332,43 @@ always @ (posedge pcgen_cpuclk or negedge cpurst_b)
 begin
   if(~cpurst_b)
     pcgen_addr[31:0] <= 32'b0;
-  else if(vec_pcgen_rst_vld)
+  else if(vec_pcgen_rst_vld)//rst信号
     pcgen_addr[31:0] <= sysio_ifu_rst_addr[31:0];
-  else if(pcgen_chgflw_vld & ~ifetch_pcgen_grant & ifetch_xx_not_busy)
+  else if(pcgen_chgflw_vld & ~ifetch_pcgen_grant & ifetch_xx_not_busy)//取指模块空闲且没有握手信号
     pcgen_addr[31:0] <= pcgen_pc[31:0];
-  else if(vec_pcgen_pc_flop)
+  else if(vec_pcgen_pc_flop)//获取中断的地址成功
     pcgen_addr[31:0] <= ifetch_pcgen_data[31:0];
-  else if(ipack_pcgen_reissue)
+  else if(ipack_pcgen_reissue)//ipack的重发射请求
     pcgen_addr[31:0] <= ifetch_pcgen_addr[31:0];
-  else if(pcgen_buf_chgflw & ~ifetch_pcgen_grant & ifetch_xx_not_busy)
+  else if(pcgen_buf_chgflw & ~ifetch_pcgen_grant & ifetch_xx_not_busy)//TODO 尝试恢复？不确定
     pcgen_addr[31:0] <= pcgen_ifpc[31:0];
   else if(ifetch_pcgen_grant)
     pcgen_addr[31:0] <= pcgen_addr_inc[31:0];
   else
-    pcgen_addr[31:0] <= pcgen_addr[31:0];
+    pcgen_addr[31:0] <= pcgen_addr[31:0];//停滞一个周期
 end
 
 assign pcgen_addr_inc[31:0] = {pcgen_pc[31:2], 2'b0} + 32'h4;
 
-assign pcgen_fetch_pc[31:0] = ifetch_xx_not_busy ? pcgen_pc[31:0]
-                                                 : pcgen_addr[31:0];
+assign pcgen_fetch_pc[31:0] = ifetch_xx_not_busy ? pcgen_pc[31:0]//正常执行路径下的pc值
+                                                 : pcgen_addr[31:0];//异常处理/特殊情况下的入口
 //assign pcgen_fetch_pc[31:0] = pcgen_pc[31:0];
 
 //------------------------------------------------
-// 3. IF PC Maintain
+// 3. IF PC Maintain  |IF阶段PC信号保留，确保信号的恢复
 //------------------------------------------------
 always @ (posedge pcgen_cpuclk or negedge cpurst_b)
 begin
   if(~cpurst_b)
     pcgen_buf_chgflw <= 1'b0;
   else if(ifpc_updt_en)// & ~ifetch_xx_not_busy)
-    pcgen_buf_chgflw <= 1'b1;
+    pcgen_buf_chgflw <= 1'b1;//缓冲下来在下个周期改变指令流
   else if(ifetch_xx_not_busy & pcgen_buf_chgflw)
     pcgen_buf_chgflw <= 1'b0;
 end
 
-assign ifpc_updt_en = pcgen_flush_vld
-                   | id_pred_pcgen_chgflw_vld & ~ifetch_xx_not_busy;
+assign ifpc_updt_en = pcgen_flush_vld//保留的IFU的PC允许更新信号
+                   | id_pred_pcgen_chgflw_vld & ~ifetch_xx_not_busy;//TODO ifetch_xx_not_busy是什么
 always @ (posedge pcgen_cpuclk or negedge cpurst_b)
 begin
   if(~cpurst_b)
@@ -385,7 +386,7 @@ end
 assign pcgen_ifetch_ifpc[31:0] = pcgen_ifpc[31:0];
 
 //------------------------------------------------
-// 4. ID PC Maintain
+// 4. ID PC Maintain  |译码阶段的PC保留
 // Todo: Reduce Resources
 //------------------------------------------------
 always @ (posedge pcgen_idpc_clk or negedge cpurst_b)
@@ -416,7 +417,7 @@ begin
     btb_tar_vld      <= 1'b0;
     btb_tar_pc[31:0] <= btb_tar_pc[31:0];
   end
-  else if(btb_chgflw_vld)
+  else if(btb_chgflw_vld)//只有在btb改变指令流信号有效时生效
   begin
     btb_tar_vld      <= 1'b1;
     btb_tar_pc[31:0] <= btb_pcgen_tar_pc[31:0];
@@ -443,7 +444,7 @@ assign pcgen_ifetch_chgflw_vld = pcgen_buf_chgflw
 assign pcgen_ctrl_chgflw_vld = pcgen_flush_vld | pcgen_buf_chgflw | id_pred_pcgen_chgflw_vld;
 
 // Output to BTB
-assign pcgen_btb_pc[31:0]   = pcgen_fetch_pc[31:0];
+assign pcgen_btb_pc[31:0]   = pcgen_fetch_pc[31:0];//当前指令的PC地址
 assign pcgen_btb_addr[31:0] = pcgen_addr[31:0];
 
 // Output to ipack

@@ -578,6 +578,7 @@ parameter RST_WFC  = 2'b01;
 parameter RST_DONE = 2'b10;
 //==========================================================
 //              FSM of reset cache inv cctl logic
+// 在处理器复位时，缓存可能包含过期的数据，为了保证处理器在复位后能正常运行，需要对cache进行无效化处理
 //==========================================================
 always @(posedge inv_sm_clk or negedge cpurst_b)
 begin

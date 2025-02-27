@@ -219,7 +219,7 @@ wire            vec_ipack_inst_mask;
 
 
 //==========================================================
-// Instruction Package Module
+// Instruction Package Module |由于在ifetch中取出来的不一定都是一条完整的指令，可能是16位指令或半条32位指令，所以需要对指令进行打包。
 // 1. Instance ICG Cell
 // 2. Instruction Package Buffer to ID stage
 // 3. Generate Valid Instruction
@@ -267,13 +267,13 @@ assign ipack_align_create   = ifetch_inst_vld & ~ifetch_ipack_unalign;
 assign ipack_buf_stall      = id_pred_ipack_ret_stall | ibuf_ipack_stall
                            ; //| id_pred_ipack_delay_stall;
 
-assign entry0_create_en = (~entry1_vld & h2_32bit_vld
-                        | ~h0_vld & h1_16bit_vld & h2_32bit_vld
-                        | h0_vld & entry1_vld & h2_32bit_vld)
+assign entry0_create_en = (~entry1_vld & h2_32bit_vld           //entry2中存的是32位指令，entry1为空，表示当前可以将entry2中的指令移到entry0中处理
+                        | ~h0_vld & h1_16bit_vld & h2_32bit_vld //entry2中存储32位指令，entry1中存储的是16位指令，entry0空
+                        | h0_vld & entry1_vld & h2_32bit_vld)   //3个entry中都有数据，需要更新
                           & ~id_pred_ipack_chgflw_vld0
                           & ~ipack_buf_stall;
-assign entry1_create_en = ipack_align_create 
-                       & ~((entry1_vld |h2_16bit_vld) & ipack_buf_stall)
+assign entry1_create_en = ipack_align_create //指令是已对齐的
+                       & ~((entry1_vld |h2_16bit_vld) & ipack_buf_stall)//
                        & ~id_pred_ipack_delay_stall;
 assign entry2_create_en = ifetch_inst_vld
                        & ~(entry2_vld & ipack_buf_stall)
@@ -285,8 +285,8 @@ assign entry1_create_icg_en = ipack_align_create;
 assign entry2_create_icg_en = ifetch_inst_vld;
 
 // create inst
-assign entry0_upd_inst[15:0] = entry2_inst[15:0];
-assign entry1_upd_inst[15:0] = ifetch_ipack_inst[15:0];
+assign entry0_upd_inst[15:0] = entry2_inst[15:0];//entry0从entry2获取数据
+assign entry1_upd_inst[15:0] = ifetch_ipack_inst[15:0];//entry1和2从取指单元获取数据
 assign entry2_upd_inst[15:0] = ifetch_ipack_inst[31:16];
 
 // create acc err
@@ -299,7 +299,7 @@ assign entry0_retire_en = ~ipack_buf_stall & entry1_vld;
 assign entry1_retire_en = ~ipack_buf_stall;
 assign entry2_retire_en = ~ipack_buf_stall & ~id_pred_ipack_delay_stall;
 
-// d. Instance Instruction Package Buffer Entry
+// d. Instance Instruction Package Buffer Entry |entry相当于一个寄存模块，这里例化了3个模块，分别为entry0，1，2
 // &ConnRule(s/ipack_entry/entry0/); @100
 // &Instance("pa_ifu_ipack_entry","x_pa_ifu_ipack_entry0"); @101
 pa_ifu_ipack_entry  x_pa_ifu_ipack_entry0 (
@@ -370,8 +370,8 @@ pa_ifu_ipack_entry  x_pa_ifu_ipack_entry2 (
 // c. Instruction Access Error for I-Buffer
 //------------------------------------------------
 
-// a. Instruction Length Judgement
-assign h0_vld       = entry0_vld & entry0_inst[1:0] == 2'b11;
+// a. Instruction Length Judgement |指令长度判断
+assign h0_vld       = entry0_vld & entry0_inst[1:0] == 2'b11;//RISCV指令如果以11结尾，则表示该指令为32位指令
 
 assign h1_16bit_vld = entry1_vld & entry1_inst[1:0] != 2'b11;
 assign h1_32bit_vld = entry1_vld & entry1_inst[1:0] == 2'b11;
@@ -382,16 +382,16 @@ assign h2_32bit_vld = entry2_vld & entry2_inst[1:0] == 2'b11
 
 // b. Valid Instruction Package
 // Generate Empty Statu for Prediction
-assign ipack_empty = ~entry0_vld & ~entry1_vld & ~entry2_vld;
-assign ipack_full = entry0_vld & entry1_vld & entry2_vld;// & entry2_inst[1:0] != 2'b11;
+assign ipack_empty = ~entry0_vld & ~entry1_vld & ~entry2_vld; //三个槽都为空
+assign ipack_full = entry0_vld & entry1_vld & entry2_vld;// & entry2_inst[1:0] != 2'b11;  //缓冲已满
 
 // Generate First Valid Inst for Prediction
-assign ipack_first_vld        = entry1_vld | ~h0_vld & h2_16bit_vld;
-assign ipack_first_inst[31:0] = entry0_vld ? {entry1_inst[15:0], entry0_inst[15:0]}
+assign ipack_first_vld        = entry1_vld | ~h0_vld & h2_16bit_vld;  //entry1中有有效指令或是h0为空且h2中有16位指令
+assign ipack_first_inst[31:0] = entry0_vld ? {entry1_inst[15:0], ent ry0_inst[15:0]}   //这里只是进行单纯的指令拼接，哪条队列为空就拼接哪条
                               : entry1_vld ? {entry2_inst[15:0], entry1_inst[15:0]}
                                            : {entry2_inst[15:0], entry2_inst[15:0]};
 // Generate Second Valid Inst for Prediction
-assign ipack_secnd_vld        = (h0_vld | h1_16bit_vld) & h2_16bit_vld;
+assign ipack_secnd_vld        = (h0_vld | h1_16bit_vld) & h2_16bit_vld;//entry0有效且entry2为16位指令或entry1为16位指令且entry2为16位指令
                               //& ~id_pred_ipack_chgflw_vld0;
 assign ipack_secnd_inst[15:0] = entry2_inst[15:0];
 

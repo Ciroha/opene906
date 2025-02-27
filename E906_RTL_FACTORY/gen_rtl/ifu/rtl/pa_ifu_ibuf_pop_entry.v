@@ -127,7 +127,7 @@ gated_clk_cell  x_ibuf_data_icg_cell (
 //          .clk_out     (entry_cpuclk)); @44
 
 //------------------------------------------------
-// 2. Entry Content
+// 2. Entry Content |与普通的buf entry相同
 // a. Entry Create and Retire Signal
 // b. Entry Valid Signal
 // c. Entry Instruction

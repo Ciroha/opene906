@@ -34,9 +34,9 @@ module pa_ifu_btb_entry(
 );
 
 // &Ports; @24
-input           btb_entry_clr_x;   
+input           btb_entry_clr_x;   //表项清除信号
 input           btb_entry_clrg_x;  
-input           btb_entry_upd_x;   
+input           btb_entry_upd_x;   //表项更新信号
 input           btb_entry_updg_x;  
 input   [15:0]  btb_rd_acc_tag;    
 input   [15:0]  btb_upd_tag;       
@@ -47,7 +47,7 @@ input           cp0_yy_clk_en;
 input           cpurst_b;          
 input           forever_cpuclk;    
 input           pad_yy_icg_scan_en; 
-output          btb_entry_rd_hit_x; 
+output          btb_entry_rd_hit_x; //输出，读命中信号
 output  [15:0]  btb_entry_tgt_y;   
 output          btb_entry_wr_hit_x; 
 
@@ -119,9 +119,9 @@ begin
   if(~cpurst_b)
     btb_vld <= 1'b0;
   else if(btb_entry_clr_x) 
-    btb_vld <= 1'b0;
+    btb_vld <= 1'b0;//在接收到清除信号后，将btb_vld信号清零，表示该btb目前无信号，可以供后续覆盖
   else if(btb_entry_upd_x)
-    btb_vld <= 1'b1;
+    btb_vld <= 1'b1;//更新覆盖后，当前btb有效
 end
 
 //------------------------------------------------

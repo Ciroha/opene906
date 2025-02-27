@@ -333,7 +333,7 @@ wire            rtu_ifu_flush_fe;
 
 
 //==========================================================
-// ID Stage Predication Module
+// ID Stage Predication Module  |ID阶段的分支预测
 // 1. Instance ICG Cell
 // 2. ID Pre-decode for prediction
 // 3. Current PC Generation

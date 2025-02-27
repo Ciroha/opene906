@@ -74,9 +74,9 @@ module pa_ifu_icache(
 
 // &Ports; @24
 input           bmu_ifu_acc_err;             
-input           cp0_ifu_icache_en;           
+input           cp0_ifu_icache_en;           //从异常管理传来的icache使能信号
 input   [31:0]  cp0_ifu_icache_inv_addr;     
-input           cp0_ifu_icache_inv_req;      
+input           cp0_ifu_icache_inv_req;      //从cp0传来的缓存无效化请求
 input           cp0_ifu_icache_inv_type;     
 input           cp0_ifu_icg_en;              
 input           cp0_yy_clk_en;               
@@ -84,7 +84,7 @@ input           cpurst_b;
 input           ctrl_ifetch_req_abort;       
 input           ctrl_ifetch_req_vld;         
 input           forever_cpuclk;              
-input           ibus_icache_cmplt;           
+input           ibus_icache_cmplt;           //ibus传来的传输完成信号
 input   [31:0]  ibus_icache_data;            
 input           ibus_icache_error;           
 input           ibus_icache_grant;           
@@ -92,15 +92,15 @@ input           ibus_icache_not_busy;
 input           ibus_icache_uc_cmplt;        
 input           ibus_icache_unalign;         
 input           ibus_trans_abort;            
-input           ifetch_outstanding;          
-input   [31:0]  ifetch_req_addr;             
-input           ifetch_req_ca;               
-input   [3 :0]  ifetch_req_prot;             
+input           ifetch_outstanding;          //ifetch未完成
+input   [31:0]  ifetch_req_addr;             //ifetch传来的读取请求
+input           ifetch_req_ca;               //指示该指令是否可缓存，根据sysmap逻辑判断
+input   [3 :0]  ifetch_req_prot;             //指示信号，bit3:ifetch_req_ca bit2:ifetch_req_buf bit1:cp0_yy_mach_mode（机器模式指示） bit0:0
 input           pad_yy_icg_scan_en;          
 input           pcgen_ifetch_chgflw_vld;     
 input   [31:0]  pcgen_ifetch_seq_addr;       
-input           pmp_ifu_acc_deny;            
-input           vec_ifetch_data_fetch;       
+input           pmp_ifu_acc_deny;            //物理内存保护单元传来的拒绝访问信号
+input           vec_ifetch_data_fetch;       //RV32V 矢量中断指令
 output          icache_ibus_acc_deny;        
 output  [31:0]  icache_ibus_addr;            
 output  [2 :0]  icache_ibus_burst;           
@@ -108,9 +108,9 @@ output          icache_ibus_data_req;
 output  [3 :0]  icache_ibus_prot;            
 output          icache_ibus_req;             
 output          icache_ibus_seq;             
-output  [31:0]  icache_ifetch_addr;          
+output  [31:0]  icache_ifetch_addr;          //给到pcgen模块的pc地址
 output          icache_ifetch_error;         
-output          icache_ifetch_grant;         
+output          icache_ifetch_grant;         //握手信号，同意req
 output          icache_ifetch_idle;          
 output  [31:0]  icache_ifetch_inst;          
 output          icache_ifetch_inst_vld;      
@@ -132,14 +132,14 @@ output          ifu_hpcp_icache_miss;
 // &Regs; @25
 reg     [26:0]  buf_hit_tag;                 
 reg             buf_hit_way;                 
-reg             direct_sel;                  
+reg             direct_sel;                  //指示访问buf还是cache中的数据
 reg     [31:0]  icache_addr_ff;              
-reg             icache_ca_ff;                
+reg             icache_ca_ff;                //当前指令可缓存信号寄存器
 reg             icache_deny;                 
 reg             icache_en;                   
 reg             icache_en_f;                 
 reg     [31:0]  icache_rd_addr;              
-reg     [3 :0]  icache_rd_prot;              
+reg     [3 :0]  icache_rd_prot;              //rd protection读取属性
 reg             icache_rd_vld;               
 reg     [31:0]  icache_refill_addr;          
 reg             icache_refill_fifo;          
@@ -659,8 +659,9 @@ begin
     icache_rd_vld <= 1'b0;
 end
 assign icache_ifetch_idle = ~icache_rd_vld & ref_fsm_idle
-                          & uc_fsm_idle;
+                          & uc_fsm_idle;  //ifetch空闲信号，只有在非icache读、回填状态机空闲、uncache状态机空闲时才为高
 
+//Icache相关信号更新
 always @ (posedge icache_rd_clk or negedge cpurst_b)
 begin
   if(~cpurst_b)
@@ -703,7 +704,7 @@ end
 // &Force("nonport", "inv_cnt_inc"); @319
 // &Force("bus", "pcgen_ifetch_seq_addr", 31, 0); @320
 
-assign icache_cmp_tag[21:0] = inv_tag_wen ? cp0_ifu_icache_inv_addr[31:10] : icache_rd_addr[31:10];
+assign icache_cmp_tag[21:0] = inv_tag_wen ? cp0_ifu_icache_inv_addr[31:10] : icache_rd_addr[31:10]; //选择是无效化的地址还是读取的地址
 //csky vperl_off
 `ifdef ICACHE_2K
 assign icache_cmp_tag_fin[21:0] = icache_cmp_tag[21:0];
@@ -713,6 +714,7 @@ assign icache_cmp_tag_fin[21:0] = {{(22-`I_TAG_TAG_WIDTH){1'b0}},
                                                    
 `endif
 //csky vperl_on
+//有效位为1且tag内容相同即为tag命中
 assign icache_way1_hit = {icache_tag_way1_vld, icache_tag_way1_dout[21:0]}
                       == {1'b1,  icache_cmp_tag_fin[21:0]};
 assign icache_way0_hit = {icache_tag_way0_vld, icache_tag_way0_dout[21:0]}
@@ -738,7 +740,7 @@ assign icache_miss_prot[3:0]  = icache_rd_prot[3:0];
 // b. Refill Request to icache
 //------------------------------------------------
 
-// a. Refill control to ibus
+// a. Refill control to ibus |主要根据miss的信息来进行refill
 always @ (posedge icache_refdp_clk or negedge cpurst_b)
 begin
   if(~cpurst_b)
@@ -750,13 +752,13 @@ begin
   end
   else if(icache_miss_req & ref_fsm_idle)
   begin
-    icache_refill_addr[31:0]   <= {icache_miss_addr[31:1], 1'b0};
+    icache_refill_addr[31:0]   <= {icache_miss_addr[31:1], 1'b0}; //指令地址对齐
     icache_refill_fifo         <= icache_tag_fifo;
     icache_refill_prot[3:0]    <= icache_miss_prot[3:0];
     icache_en_f                <= icache_en;
   end
 end
-assign icache_refill_ca = icache_refill_prot[3] & icache_en_f;
+assign icache_refill_ca = icache_refill_prot[3] & icache_en_f;  //位3指示是否启用cache
 
 // Refill FSM
 // including IDLE state, wait for data state,
@@ -824,11 +826,11 @@ end
 
 // state information 
 assign ref_fsm_idle = ref_cur_st[1:0] == IDLE;
-assign ref_fsm_req  = ref_cur_st[1:0] == REQ;
-assign ref_fsm_wfc  = ref_cur_st[1:0] == WFC;
-assign ref_fsm_ref  = ref_cur_st[1:0] == RFL;
+assign ref_fsm_req  = ref_cur_st[1:0] == REQ; //发生miss的情况会发出回填请求
+assign ref_fsm_wfc  = ref_cur_st[1:0] == WFC; //发出请求后等待ibus发送数据完成
+assign ref_fsm_ref  = ref_cur_st[1:0] == RFL; //接收完成信号并进入refill状态
 
-//refill abort
+//refill abort|指示refill是否中止
 always @ (posedge icache_reffsm_clk or negedge cpurst_b)
 begin
   if(~cpurst_b)
@@ -852,9 +854,9 @@ begin
     req_cnt[2:0] <= req_cnt[2:0];
 end
 
-// req done when req_cnt wrap back to miss req addr
+// req done when req_cnt wrap back to miss req addr |miss后向总线发起读取地址请求
 assign req_cnt_done   = req_cnt[2:0] == icache_refill_addr[4:2];
-assign req_addr[31:0] = {icache_refill_addr[31:5], req_cnt[2:0], 2'b00};
+assign req_addr[31:0] = {icache_refill_addr[31:5], req_cnt[2:0], 2'b00};  //以32bit为单位对齐
 
 //refill valid
 always @ (posedge icache_reffsm_clk or negedge cpurst_b)
@@ -865,7 +867,7 @@ begin
     ref_vld <= ibus_icache_cmplt & ~ibus_icache_error;
 end
 
-// refill address gen
+// refill address gen |用于对一整个缓存行的替换，8条指令32B，为了利用空间局部性
 always @ (posedge icache_reffsm_clk or negedge cpurst_b)
 begin
   if(~cpurst_b)
@@ -880,7 +882,7 @@ end
 
 assign ref_cnt_inc[2:0] = ref_cnt[2:0] + 3'b001;
 
-assign ref_cnt_done = ref_cnt_inc[2:0] == icache_miss_addr[4:2];
+assign ref_cnt_done = ref_cnt_inc[2:0] == icache_miss_addr[4:2];  //回填阶段完成
 
 assign refill_addr[31:0] = {icache_refill_addr[31:5], ref_cnt[2:0], 2'b0};
 
@@ -893,7 +895,7 @@ begin
 end
 
 // Un-Cache FSM
-// including IDLE state, wait for data state,
+// including IDLE state, wait for data state, |Uncache状态机，主要负责一些不能缓存的指令的读写操作
 parameter UIDLE = 1'b0,
           UWFC  = 1'b1;
 
@@ -953,7 +955,7 @@ begin
     icache_addr_ff[31:0] <= ifetch_req_addr[31:0];
 end
 
-// refill ibus request 
+// refill ibus request |refill模块向ibus模块发送的请求
 assign icache_req             = ref_fsm_req 
                               | ref_fsm_wfc & icache_refill_ca
                               | ref_fsm_ref & ~req_cnt_done
@@ -966,36 +968,38 @@ assign icache_data_req        = ref_fsm_req
 
 assign icache_ibus_req        = icache_req;
 assign icache_ibus_data_req   = icache_data_req;
+//ref_fsm_idle为高电平时，代表当前没有回填操作，icache可以正常处理请求
+//ref_fsm_idle为低电平时，代表当前正在回填操作，需要从ibus读取数据
 assign icache_ibus_addr[31:0] = ref_fsm_idle ? ifetch_req_addr[31:0] 
                                              : req_addr[31:0];
 assign icache_ibus_prot[3:0]  = ref_fsm_idle ? ifetch_req_prot[3:0]
                                              : icache_refill_prot[3:0];
 assign icache_ibus_seq        = ref_fsm_wfc & icache_refill_ca
-                              | ref_fsm_ref & ~req_cnt_done;
+                              | ref_fsm_ref & ~req_cnt_done;  //总线相关信号
 assign icache_ibus_burst[2:0] = ref_fsm_idle ? 3'b000 : 3'b100;
 assign icache_ibus_acc_deny   = ref_fsm_idle & pmp_ifu_acc_deny;
 
 // refill icache request 
 assign refill_icache_req        = ref_fsm_ref & ref_vld;
-assign refill_icache_init       = ref_cnt[2:0] == icache_miss_addr[4:2];
+assign refill_icache_init       = ref_cnt[2:0] == icache_miss_addr[4:2];  //回填阶段开始
 assign refill_icache_done       = ref_cnt_done;
 assign refill_icache_addr[31:0] = refill_addr[31:0];
 assign refill_icache_fifo       = icache_refill_fifo;
 assign refill_icache_data[31:0] = refill_data[31:0];
 
 // icache result to ifetch
-assign icache_cmplt             = ref_fsm_wfc & ibus_icache_cmplt & ~refill_data_abort;
+assign icache_cmplt             = ref_fsm_wfc & ibus_icache_cmplt & ~refill_data_abort; //指令缓存接收到所需数据并写入缓存中，代表complete
 assign icache_bypass_vld        = icache_cmplt // & ~icache_vec_data
-                               | uc_fsm_wfc & ibus_icache_cmplt;
+                               | uc_fsm_wfc & ibus_icache_cmplt;  //缓存完成/uncache命令才可以前递
 assign icache_ifetch_inst_vld   = icache_bypass_vld | icache_hit_vld;// & ~icache_vec_data;
-assign icache_ifetch_inst_vld_gate = icache_bypass_vld | icache_rd_vld;
+assign icache_ifetch_inst_vld_gate = icache_bypass_vld | icache_rd_vld; //用于门控时钟的信号
 assign icache_ifetch_inst[31:0] = icache_bypass_vld ? ibus_icache_data[31:0]
                                                     : icache_hit_inst[31:0];
 assign icache_ifetch_error      = icache_bypass_vld ? ibus_icache_error
                                                     : icache_deny;
 assign icache_ifetch_unalign    = icache_bypass_vld ? uc_fsm_wfc ? ibus_icache_unalign
                                                     : icache_refill_addr[1]
-                                                    : icache_rd_addr[1];
+                                                    : icache_rd_addr[1];  //根据bit1判断是否对齐
 assign icache_ifetch_grant      = ref_rdy & icache_rd_req & icache_ca_ff
                                | icache_uc_req & ibus_icache_grant
                                | icache_uc_sel & ifetch_outstanding & ibus_icache_grant;
@@ -1006,7 +1010,7 @@ assign icache_ifetch_vec_data_cmplt = (icache_cmplt | icache_hit_vld) & icache_v
 assign icache_ifetch_rd_addr[31:0] = ifetch_req_addr[31:0];
 assign icache_ifetch_addr[31:0]    = icache_addr_ff[31:0];
 assign icache_ifetch_mach_mode     = ifetch_req_prot[1];
-assign icache_ifetch_not_busy      = (~ref_fsm_idle | icache_rd_vld) & ~ibus_trans_abort
+assign icache_ifetch_not_busy      = (~ref_fsm_idle | icache_rd_vld) & ~ibus_trans_abort//正处于回填状态或icache读可执行且ibus传输没有中断
                                   | ibus_icache_not_busy;
 assign icache_ifetch_uc_sel        = uc_fsm_wfc;
 

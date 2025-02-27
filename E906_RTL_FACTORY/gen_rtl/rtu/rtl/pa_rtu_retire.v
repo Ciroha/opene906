@@ -404,7 +404,7 @@ wire            retire_top_lsu_ex2_stall;
 wire    [31:0]  retire_trap_epc;                      
 wire            retire_trap_epc_sel_cur_pc;           
 wire            retire_trap_tval_ex1;                 
-wire            retire_trap_vld;                      
+wire            retire_trap_vld;                      //同步异步trap信号处理
 wire            retire_xx_ex2_expt_raw;               
 wire            rtu_cp0_bus_error;                    
 wire    [31:0]  rtu_cp0_epc;                          

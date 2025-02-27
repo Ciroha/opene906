@@ -99,7 +99,7 @@ input           cp0_ifu_srst_req;
 input           cp0_yy_clk_en;               
 input           cp0_yy_mach_mode;            
 input           cpurst_b;                    
-input           ctrl_ifetch_req_abort;       
+input           ctrl_ifetch_req_abort;       //ctrl模块传来的中断请求
 input           ctrl_ifetch_req_vld;         
 input           forever_cpuclk;              
 input           pad_yy_icg_scan_en;          
@@ -158,7 +158,7 @@ reg     [1 :0]  abort_cur_st;
 reg     [1 :0]  abort_nxt_st;                
 reg     [2 :0]  cur_st;                      
 reg             ibus_deny_reg;               
-reg             ibus_unalign_reg;            
+reg             ibus_unalign_reg;            //ibus取指不对齐
 reg     [2 :0]  nxt_st;                      
 
 // &Wires; @26
@@ -202,7 +202,7 @@ wire    [3 :0]  ibus_req_prot;
 wire            ibus_req_seq;                
 wire    [1 :0]  ibus_req_size;               
 wire            ibus_req_vld;                
-wire            ibus_trans_abort;            
+wire            ibus_trans_abort;            //ibus传输中断信号
 wire            ibusif_idle_st;              
 wire            icache_ibus_acc_deny;        
 wire    [31:0]  icache_ibus_addr;            
@@ -221,7 +221,7 @@ wire            icache_ifetch_inst_vld_gate;
 wire            icache_ifetch_mach_mode;     
 wire            icache_ifetch_not_busy;      
 wire    [31:0]  icache_ifetch_rd_addr;       
-wire            icache_ifetch_uc_sel;        
+wire            icache_ifetch_uc_sel;        //当前指令属性，是否是uncache指令
 wire            icache_ifetch_unalign;       
 wire            icache_ifetch_vec_data_cmplt; 
 wire            icache_top_abort;            
@@ -389,7 +389,7 @@ pa_ifu_icache  x_pa_ifu_icache (
   .vec_ifetch_data_fetch        (vec_ifetch_data_fetch       )
 );
 
-assign ibus_req_vld        = icache_ibus_req;
+assign ibus_req_vld        = icache_ibus_req;//icache传来的需要ibus的信号
 assign ibus_data_req_vld   = icache_ibus_data_req;
 assign ibus_req_addr[31:0] = icache_ibus_addr[31:0];
 assign ibus_req_prot[3:0]  = icache_ibus_prot[3:0];
@@ -493,7 +493,7 @@ begin
         nxt_st[2:0] = IDLE;
     end
   else if(ibus_req_vld & flop_out_bus)
-    begin //flop out bus can grant 2 outstanding inst fetch
+    begin //flop out bus can grant 2 outstanding inst fetch |flop out总线可以支持同时两个的指令取指请求
       if(bmu_ifu_grant)
         nxt_st[2:0] = WFD1WFD2;
       else
@@ -564,7 +564,7 @@ assign ibus_inst_data_req = (cur_st[2:0] == IDLE)
 
 assign ifetch_outstanding = cur_st[2:0] == WFG1 | cur_st[2:0] == WFD1WFG2 | cur_st[2:0] == WFD1WFD2;
 
-assign trans_abort = icache_ifetch_uc_sel & ctrl_ifetch_req_abort;
+assign trans_abort = icache_ifetch_uc_sel & ctrl_ifetch_req_abort;//传输中断
 assign ibus_icache_uc_cmplt = ((cur_st[2:0] == WFD1) 
                             | (cur_st[2:0] == WFD1WFG2)
                             | (cur_st[2:0] == WFD1WFD2)
@@ -584,7 +584,7 @@ assign ibus_abort_trig = ((cur_st[2:0] == WFD1)
                       | (cur_st[2:0] == WFG1)
                       | (cur_st[2:0] == WFD1WFG2)
                            & ~bmu_ifu_acc_err)
-                           & trans_abort; 
+                           & trans_abort; //中断触发信号判断
 
 //assign ibus_no_outstanding = (cur_st[2:0] == IDLE)
 //                          | (cur_st[2:0] == WFG1)
@@ -599,7 +599,7 @@ assign ibus_abort_trig = ((cur_st[2:0] == WFD1)
 //assign ibus_prot_buf_sel = (cur_st[2:0] == WFG1) | (cur_st[2:0] == WFD1WFG2);
 
 
-//the abort SM
+//the abort SM |中断状态机
 always @(posedge ifetch_cpuclk or negedge cpurst_b)
 begin
   if(~cpurst_b)
@@ -657,7 +657,7 @@ endcase
 // &CombEnd; @330
 end
 
-assign ibus_trans_abort = (abort_cur_st[1:0] != ABORT_IDLE);
+assign ibus_trans_abort = (abort_cur_st[1:0] != ABORT_IDLE);//不在空闲状态就是为中断触发
 
 // b. I-Bus Request Handshake
 assign ibus_req = ibus_inst_req;
@@ -670,7 +670,7 @@ begin
   if(~cpurst_b)
     ibus_unalign_reg <= 1'b0;
   else if(bmu_ifu_grant)
-    ibus_unalign_reg <= ibus_req_addr[1];
+    ibus_unalign_reg <= ibus_req_addr[1];//4字节对齐，所以以地址的bit1作为判断的依据
   else if(ibus_req_cmplt)
     ibus_unalign_reg <= 1'b0;
 end 

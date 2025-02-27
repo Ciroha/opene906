@@ -30,7 +30,7 @@ module pa_ifu_btb(
   id_pred_btb_tar_pc,
   id_pred_btb_upd_vld,
   id_pred_btb_upd_vldg,
-  ifetch_pcgen_grant,
+  ifetch_pcgen_grant
   iu_ifu_tar_pc_vld,
   pad_yy_icg_scan_en,
   pcgen_btb_addr,
@@ -71,7 +71,7 @@ wire            btb_clr_one;
 wire            btb_clr_oneg;         
 wire    [15:0]  btb_entry_clr;        
 wire    [15:0]  btb_entry_clrg;       
-wire    [15:0]  btb_entry_rd_hit;     
+wire    [15:0]  btb_entry_rd_hit;     //读命中btb
 wire            btb_entry_replace;    
 wire            btb_entry_replaceg;   
 wire    [15:0]  btb_entry_tgt_0;      
@@ -167,7 +167,7 @@ gated_clk_cell  x_btb_icg_cell (
 //------------------------------------------------
 // 2. Instance Buffer Entries
 //------------------------------------------------
-parameter ENTRY_NUM = 16;
+parameter ENTRY_NUM = 16;//L0 BTB有16个表项且是全相联的
 
 // &ConnRule(s/_x$/[0]/); @63
 // &ConnRule(s/_y$/_0/); @64
@@ -551,15 +551,15 @@ assign btb_entry_clr[15:0] = {16{btb_clr_one}} & btb_entry_wr_hit[15:0]
 assign btb_entry_clrg[15:0] = {16{btb_clr_oneg}} & btb_entry_wr_hit[15:0]
                            | {16{cp0_ifu_btb_clr}};
 
-// b. Update entry depending on fifo bit
+// b. Update entry depending on fifo bit  |整个BTB遵循先进先出的原则
 assign btb_entry_upd_vld = id_pred_btb_upd_vld & cp0_ifu_btb_en;
 assign btb_entry_upd_vldg = id_pred_btb_upd_vldg & cp0_ifu_btb_en;
 
 always @(posedge btb_clk or negedge cpurst_b)
 begin
   if(~cpurst_b)
-    btb_fifo[15:0] <= 16'b1;
-  else if(btb_entry_upd_vld & ~btb_wr_hit_vld)
+    btb_fifo[15:0] <= 16'b1;//从bit0开始
+  else if(btb_entry_upd_vld & ~btb_wr_hit_vld)//如果要写入的值的tag在当前不存在，则通过fifo来决定写入的地址
     btb_fifo[15:0] <= {btb_fifo[14:0], btb_fifo[15]};
   else if(btb_clr_one)
     btb_fifo[15:0] <= btb_entry_wr_hit[15:0];
@@ -567,7 +567,7 @@ begin
     btb_fifo[15:0] <= btb_fifo[15:0];
 end
 // &Force("bus", "idu_iu_ex1_cur_pc", 31, 0); @156
-assign btb_entry_replace   = btb_entry_upd_vld & btb_wr_hit_vld;
+assign btb_entry_replace   = btb_entry_upd_vld & btb_wr_hit_vld;//如果写命中了，即tag相同，则直接替换该路
 assign btb_entry_replaceg  = btb_entry_upd_vldg & btb_wr_hit_vld;
 assign btb_entry_upd[15:0] = btb_entry_replace
                            ? btb_entry_wr_hit[15:0]
@@ -579,7 +579,7 @@ assign btb_entry_updg[15:0] = btb_entry_replaceg
 // update next word when unaligned 32-bit inst
 // &Force("bus", "id_pred_btb_cur_pc", 31, 0); @167
 // &Force("bus", "id_pred_btb_tar_pc", 31, 0); @168
-assign btb_upd_tag[BTB_ADDR_WIDTH-1:0]   = id_pred_btb_cur_pc[BTB_ADDR_WIDTH-1:0];
+assign btb_upd_tag[BTB_ADDR_WIDTH-1:0]   = id_pred_btb_cur_pc[BTB_ADDR_WIDTH-1:0];//对btb的更新一般从id的预测模块传来
 
 assign btb_upd_tgt[BTB_ADDR_WIDTH-1:0]   = id_pred_btb_tar_pc[BTB_ADDR_WIDTH-1:0];
 
@@ -588,20 +588,20 @@ assign btb_upd_tgt[BTB_ADDR_WIDTH-1:0]   = id_pred_btb_tar_pc[BTB_ADDR_WIDTH-1:0
 //------------------------------------------------
 //assign btb_acc_tag[BTB_ADDR_WIDTH-1:0] = btb_entry_upd_vld | id_pred_btb_mis_pred
 //                         ? btb_upd_tag[BTB_ADDR_WIDTH-1:0] : pcgen_btb_pc[BTB_ADDR_WIDTH-1:0];
-assign btb_rd_acc_tag[BTB_ADDR_WIDTH-1:0] = pcgen_btb_pc[BTB_ADDR_WIDTH-1:0];
+assign btb_rd_acc_tag[BTB_ADDR_WIDTH-1:0] = pcgen_btb_pc[BTB_ADDR_WIDTH-1:0];//以pcgen传来的pc值的低16位作为tag
 assign btb_wr_acc_tag[BTB_ADDR_WIDTH-1:0] = btb_upd_tag[BTB_ADDR_WIDTH-1:0];
 
-assign btb_rd_hit_vld       = |btb_entry_rd_hit[15:0];
+assign btb_rd_hit_vld       = |btb_entry_rd_hit[15:0];//有一位为真即表示命中
 assign btb_wr_hit_vld       = |btb_entry_wr_hit[15:0];
 assign btb_flop_vld         = ctrl_btb_inst_fetch & btb_rd_hit_vld
-                           & ~id_pred_btb_upd_vld & ~id_pred_btb_mis_pred;
+                           & ~id_pred_btb_upd_vld & ~id_pred_btb_mis_pred;//处于取指且btb命中
 
 always @ (posedge btb_clk or negedge cpurst_b)
 begin
   if(~cpurst_b)
     btb_entry_hit_flop[15:0] <= 16'b0;
   else if(btb_flop_vld & ifetch_pcgen_grant)
-    btb_entry_hit_flop[15:0] <= btb_entry_rd_hit[15:0];
+    btb_entry_hit_flop[15:0] <= btb_entry_rd_hit[15:0];//btb hit寄存
 end
 
 // &CombBeg; @194
@@ -623,7 +623,7 @@ always @( btb_entry_tgt_10[15:0]
        or btb_entry_tgt_15[15:0]
        or btb_entry_hit_flop[15:0])
 begin
-case(btb_entry_hit_flop[15:0])
+case(btb_entry_hit_flop[15:0])//根据命中的表项选择
   16'b0000000000000001: btb_hit_tgt[BTB_ADDR_WIDTH-1:0] = btb_entry_tgt_0[BTB_ADDR_WIDTH-1:0];
   16'b0000000000000010: btb_hit_tgt[BTB_ADDR_WIDTH-1:0] = btb_entry_tgt_1[BTB_ADDR_WIDTH-1:0];
   16'b0000000000000100: btb_hit_tgt[BTB_ADDR_WIDTH-1:0] = btb_entry_tgt_2[BTB_ADDR_WIDTH-1:0];
@@ -665,7 +665,7 @@ end
 // &Force("bus", "pcgen_btb_pc", 31, 0); @233
 // &Force("bus", "pcgen_btb_addr", 31, 0); @234
 assign btb_xx_chgflw_vld      = btb_pred_flop;
-assign btb_pcgen_tar_pc[31:0] = {pcgen_btb_addr[31:BTB_ADDR_WIDTH], btb_hit_tgt[BTB_ADDR_WIDTH-1:0]};
+assign btb_pcgen_tar_pc[31:0] = {pcgen_btb_addr[31:BTB_ADDR_WIDTH], btb_hit_tgt[BTB_ADDR_WIDTH-1:0]};//TODO 为何只用低16位？加快速度？
 
 
 

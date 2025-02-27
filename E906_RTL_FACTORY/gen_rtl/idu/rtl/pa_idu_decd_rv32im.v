@@ -37,7 +37,7 @@ input   [2 :0]  decd_func3;
 input   [6 :0]  decd_func7;          
 input   [31:0]  decd_inst;           
 input   [6 :0]  decd_op;             
-output  [19:0]  decd_rv32im_func;    
+output  [19:0]  decd_rv32im_func;    //统一的功能码
 output  [31:0]  decd_rv32im_imm1;    
 output          decd_rv32im_imm1_vld; 
 output  [31:0]  decd_rv32im_imm2;    
@@ -51,8 +51,8 @@ output  [5 :0]  decd_rv32im_sel;
 // &Regs; @29
 reg     [19:0]  decd_atm_func;       
 reg     [19:0]  decd_func;           
-reg             decd_rd_vld;         
-reg     [5 :0]  decd_sel;            
+reg             decd_rd_vld;         //是否需要目标寄存器
+reg     [5 :0]  decd_sel;            //指令对应的功能单元
 
 // &Wires; @30
 wire            auipc_imm_vld;       
@@ -124,7 +124,7 @@ begin
   decd_sel[`SEL_WIDTH-1:0]   = {`SEL_WIDTH{1'b0}};
   decd_func[`FUNC_WIDTH-1:0] = {`FUNC_WIDTH{1'b0}};
   decd_rd_vld                = 1'b0;
-  casez({decd_func7[6:0], decd_func3[2:0], decd_op[6:0]})
+  casez({decd_func7[6:0], decd_func3[2:0], decd_op[6:0]}) //用特征位做的比较
     //===================================================
     // ALU Decoder
     //---------------------------------------------------
@@ -538,7 +538,7 @@ assign load_imm_vld    = decd_inst[6:2] == 5'b00000;
 assign itype_imm_vld   = decd_inst[6:2] == 5'b00100
                        | decd_inst[6:2] == 5'b11100;
 assign jalr_imm_vld    = decd_inst[6:2] == 5'b11001;
-assign itype_imm[31:0] = {{21{decd_inst[31]}}, decd_inst[30:20]};
+assign itype_imm[31:0] = {{21{decd_inst[31]}}, decd_inst[30:20]}; //符号拓展
 
 // S-Type: Store
 assign stype_imm_vld   = decd_inst[6:2] == 5'b01000; 

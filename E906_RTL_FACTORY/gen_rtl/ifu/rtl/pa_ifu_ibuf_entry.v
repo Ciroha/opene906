@@ -170,7 +170,7 @@ gated_clk_cell  x_ibuf_data_icg_cell (
 //          .clk_out     (entry_cpuclk)); @47
 
 //------------------------------------------------
-// 2. Entry Content
+// 2. Entry Content |存储的条目的内容
 // a. Entry Create and Retire Signal
 // b. Entry Valid Signal
 // c. Entry Instruction
@@ -181,7 +181,7 @@ assign entry_create  = ibuf_entry_create0_en | ibuf_entry_create1_en
 assign entry_data_create = ibuf_entry_create0_en 
                         | ibuf_entry_create1_en
                         | ibuf_entry_create2_en;
-assign entry_retire  = ibuf_entry_retire0_en | ibuf_entry_retire1_en;
+assign entry_retire  = ibuf_entry_retire0_en | ibuf_entry_retire1_en; //只要有retire信号就可以retire
 
 // b. Entry Valid Signal
 always @(posedge ibuf_cpuclk or negedge cpurst_b)

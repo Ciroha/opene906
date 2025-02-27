@@ -347,7 +347,7 @@ wire            vec_ibuf_warm_up;
 
 
 //==========================================================
-// Instruction Buffer Module
+// Instruction Buffer Module  | 该模块实现了指令缓冲模块，用于存储从指令打包模块中获取的指令并保证后续ID阶段获得连续、有效的指令流
 // 1. Instance ICG cells
 // 2. Instance I-Buffer Entries
 // 3. I-Buffer Read Port
@@ -385,7 +385,7 @@ gated_clk_cell  x_ifu_ibuf_icg_cell (
 //         ); @55
 
 //------------------------------------------------
-// 2. Instance I-Buffer Entries
+// 2. Instance I-Buffer Entries |定义了6个指令缓冲条目
 //------------------------------------------------
 parameter ENTRY_NUM = 6;
 
@@ -631,7 +631,7 @@ pa_ifu_ibuf_entry  x_pa_ifu_ibuf_entry5 (
 // The instruction will be retired in inst buf when
 // it can be piped down to ID stage
 assign ibuf_retire0_en = pop0_vld & ctrl_ibuf_pop_en;
-assign ibuf_retire1_en = ibuf_inst32 & ctrl_ibuf_pop_en;
+assign ibuf_retire1_en = ibuf_inst32 & ctrl_ibuf_pop_en;  //只有在指令为32位时，才有retire1
 
 assign ibuf_retire0_en_vld = ibuf_retire0_en;
 assign ibuf_inst_32_vld = ibuf_inst32;
@@ -653,11 +653,11 @@ end
 // &CombBeg; @107
 always @( pop0[5:0]
        or ibuf_inst_32_vld)
-begin
-  if(ibuf_inst_32_vld)
+begin //pop0移动逻辑
+  if(ibuf_inst_32_vld)  //32位指令情况下
     pop0_shift[ENTRY_NUM-1:0] = {pop0[ENTRY_NUM-3:0],
                                  pop0[ENTRY_NUM-1:ENTRY_NUM-2]};
-  else
+  else  //16位指令
     pop0_shift[ENTRY_NUM-1:0] = {pop0[ENTRY_NUM-2:0],
                                  pop0[ENTRY_NUM-1]};
 // &CombEnd; @114
@@ -874,7 +874,7 @@ begin
 end
 
 //------------------------------------------------
-// 4. I-Buffer Write Port
+// 4. I-Buffer Write Port |主要根据ipack发送过来的数据位数决定写入的位数
 // a. Create Information into I-Buffer
 // b. Generate Entry Create Signal for Each Entry 
 // c. Generate Entry Create Instruction
@@ -882,7 +882,7 @@ end
 // a. Create Information into I-Buffer
 // the create0 signal
 assign ipack_bypass_vld = ibuf_empty & ipack_ibuf_inst_vld;
-assign ipack_create0_en = ipack_ibuf_inst_vld
+assign ipack_create0_en = ipack_ibuf_inst_vld //处理16位指令或32位指令的一部分
                         & ~(ibuf_empty & 
                              (ipack_ibuf_inst_two & ~pop_entry_vld & ~idu_ifu_id_stall
                                | ipack_ibuf_inst_one & ~pop_entry_vld
@@ -909,7 +909,7 @@ assign ibuf_create1_en  = ipack_create1_en | dtu_create1_en;
 assign ibuf_create1_data_en  = ipack_create1_data_en | dtu_create1_en;
 
 // the create2 signal
-assign ibuf_create2_en = ipack_ibuf_inst_vld & ipack_ibuf_inst_all 
+assign ibuf_create2_en = ipack_ibuf_inst_vld & ipack_ibuf_inst_all //仅在ipack发送48位时使用
                         & ~id_pred_ibuf_chgflw_vld0
                         & (~ibuf_empty | idu_ifu_id_stall & pop_entry_vld);
 assign ibuf_create2_data_en = ipack_ibuf_inst_vld_raw & ~ibuf_entry_stall & ipack_ibuf_inst_all 
@@ -1022,10 +1022,10 @@ assign ibuf_create0_inst[15:0] = // create dtu low inst when dbg on
                                  // empty and ipack full
                                : ipack_ibuf_inst_full & (~pop_entry_vld 
                                       | ~idu_ifu_id_stall & ibuf_empty)
-                               ? ipack_ibuf_inst[47:32]
+                               ? ipack_ibuf_inst[47:32] //满ipack
                                  // create ipack high inst when pop entry
                                  // empty and ipack first 16-bit
-                               : ipack_ibuf_inst_two & ~ipack_inst_32 
+                               : ipack_ibuf_inst_two & ~ipack_inst_32 //双16位模式 
                                    & (~pop_entry_vld | ~idu_ifu_id_stall & ibuf_empty)
                                ? ipack_ibuf_inst[31:16]
                                : ipack_ibuf_inst[15:0];
@@ -1053,7 +1053,7 @@ assign ibuf_create1_acc_err    = ipack_ibuf_acc_err[1];
 assign ibuf_create2_acc_err    = ipack_ibuf_acc_err[2];
 
 //------------------------------------------------
-// 5. Valid Instruction Generation
+// 5. Valid Instruction Generation  |这里对指令缓冲进行了管理
 // a. The I-Buffer status signal
 // b. The Valid Instruction
 //------------------------------------------------
@@ -1064,8 +1064,8 @@ assign ibuf_vld_num[2:0] = {2'b0, entry0_vld}
                          + {2'b0, entry2_vld}
                          + {2'b0, entry3_vld}
                          + {2'b0, entry4_vld}
-                         + {2'b0, entry5_vld};
-
+                         + {2'b0, entry5_vld};  //用于计算可用entry数
+//ibuf状态判断
 assign ibuf_full         = ibuf_vld_num[2:0] == 3'b110; 
 assign ibuf_one_avalbe   = ibuf_vld_num[2:0] == 3'b101; 
 assign ibuf_two_avalbe   = ibuf_vld_num[2:0] == 3'b100; 
@@ -1113,7 +1113,7 @@ assign ibuf_inst32   = pop0_vld & pop1_vld & pop0_inst_32;
 // &Force("nonport", "pop1_halt_info"); @492
 
 //------------------------------------------------
-// 6. I-Buffer Pop Entry
+// 6. I-Buffer Pop Entry  |为pop指针配置的两个条目
 //------------------------------------------------
 // a. entry instance
 //------------------------------------------------

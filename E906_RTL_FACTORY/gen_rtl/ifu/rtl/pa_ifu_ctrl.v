@@ -103,7 +103,7 @@ wire         vec_ctrl_seq_mask;
 
 
 //==========================================================
-// IFU Control Module
+// IFU Control Module |一些控制信号
 // 1. Inst Fetch Requet Valid Signal
 // 2. Inst Fetch Stage Pipe Signal
 // 3. Flush Signal for IFU modules
@@ -115,7 +115,7 @@ wire         vec_ctrl_seq_mask;
 // b. Not fetch when lpmd or debug on
 //------------------------------------------------
 assign ctrl_inst_fetch = ibuf_ctrl_inst_fetch 
-                      & ~(cp0_ifu_in_lpmd | cp0_ifu_lpmd_req)
+                      & ~(cp0_ifu_in_lpmd | cp0_ifu_lpmd_req) //非低功耗模式
                       & ~rtu_yy_xx_dbgon
                       & ~vec_ctrl_reset_mask
                       & ~cp0_ifu_srst_req
@@ -127,12 +127,12 @@ assign ctrl_inst_fetch = ibuf_ctrl_inst_fetch
                       & ~vec_ctrl_seq_mask;
 
 //------------------------------------------------
-// 2. Inst Fetch Stage Pipedown Signal
+// 2. Inst Fetch Stage Pipedown Signal  |流水线控制
 //------------------------------------------------
 assign ctrl_if_pipedown = ifetch_ctrl_inst_vld & ~id_pred_ctrl_stall;
 
 //------------------------------------------------
-// 3. Flush Signal for IFU modules
+// 3. Flush Signal for IFU modules  |流水线冲刷控制
 //------------------------------------------------
 assign ctrl_if_abort = rtu_ifu_flush_fe | pcgen_ctrl_chgflw_vld | idu_ifu_tail_vld | rtu_yy_xx_tail_int_vld;
 

@@ -66,7 +66,7 @@ module pa_ifu_vec(
 // &Ports; @24
 input           cp0_ifu_icg_en;         
 input   [31:0]  cp0_ifu_mtvec;          
-input           cp0_ifu_rst_inv_done;   
+input           cp0_ifu_rst_inv_done;   //cp0传来的因复位而无效cache的完成信号
 input           cp0_yy_clk_en;          
 input           cpurst_b;               
 input           dtu_ifu_halt_on_reset;  
@@ -162,7 +162,7 @@ wire            vec_ibuf_warm_up;
 wire            vec_ifetch_data_fetch;  
 wire            vec_inst_fetch;         
 wire            vec_ipack_inst_mask;    
-wire            vec_pc_flop;            
+wire            vec_pc_flop;            //指示当前已成功获取矢量中断程序的地址
 wire            vec_pcgen_chgflw_vld;   
 wire            vec_pcgen_idle;         
 wire            vec_pcgen_inst_fetch;   
@@ -279,6 +279,7 @@ parameter HALT     = 4'b1010;
 // VEC_WFC  : Vector table address result waiting
 // VEC_CMPT : Vector table address complete and start fetching inst.
 // VEC_ERR  : Vector table address error handling
+// WARM_UP  : 在复位后进行系统的预热
 
 always @(posedge vec_sm_clk or negedge cpurst_b)
 begin
@@ -308,13 +309,13 @@ always @( vec_cur_state[3:0]
 begin
 case(vec_cur_state[3:0])
   RESET: 
-    if(cp0_ifu_rst_inv_done & sysio_ifu_rst_addr_done)
+    if(cp0_ifu_rst_inv_done & sysio_ifu_rst_addr_done)//复位状态，需要等待cache清除完成且复位地址准备完成
       vec_next_state[3:0] = WARM_UP;
     else
       vec_next_state[3:0] = RESET;
   WARM_UP: 
     if(warm_up_cnt_done)
-      if(dtu_ifu_halt_on_reset)
+      if(dtu_ifu_halt_on_reset)//来自调试单元的信号，请求进入debug模式
         vec_next_state[3:0] = HALT;
       else
         vec_next_state[3:0] = IDLE;
@@ -323,12 +324,12 @@ case(vec_cur_state[3:0])
   HALT: 
     vec_next_state[3:0] = IDLE;
   IDLE: 
-    if(rtu_yy_xx_expt_vld & ~rtu_ifu_lockup_expt_vld)
-      if(rtu_yy_xx_expt_int & rtu_yy_xx_int_hv)
-        vec_next_state[3:0] = VEC_PREP;
+    if(rtu_yy_xx_expt_vld & ~rtu_ifu_lockup_expt_vld)//如果传来异常信号且当前没有锁定
+      if(rtu_yy_xx_expt_int & rtu_yy_xx_int_hv)//异常为interrupt且中断的优先级高
+        vec_next_state[3:0] = VEC_PREP;//需要查找向量表从而进入中断处理程序的入口
       else
-        vec_next_state[3:0] = PC_LOAD;
-    else if(rtu_yy_xx_tail_int_vld)
+        vec_next_state[3:0] = PC_LOAD;//普通异常只需要从mtvec载入pc地址
+    else if(rtu_yy_xx_tail_int_vld)//TODO中断咬尾相关
       if(rtu_yy_xx_int_hv)
         vec_next_state[3:0] = VEC_PREP;
       else
@@ -338,14 +339,14 @@ case(vec_cur_state[3:0])
   PC_LOAD: 
     vec_next_state[3:0] = IDLE;
   VEC_PREP: 
-    if(ifetch_vec_idle)
+    if(ifetch_vec_idle)//ifetch单元处于空闲状态就可以进行pcgen，中断向量表存储在内存中，需要停止取指时才能访问
       vec_next_state[3:0] = VEC_PCG;
     else
       vec_next_state[3:0] = VEC_PREP;
-  VEC_PCG: 
+  VEC_PCG: //获取地址后，准备取数据
     vec_next_state[3:0] = VEC_REQ;
   VEC_REQ: 
-    if(ifetch_vec_grant)
+    if(ifetch_vec_grant)//发出req后成功握手
       vec_next_state[3:0] = VEC_WFC;
     else
       vec_next_state[3:0] = VEC_REQ;
@@ -391,7 +392,7 @@ begin
     vector_rst_inv_ff <= vec_sm_reset;
 end
 
-assign vec_rst_inv_req = vec_sm_reset & ~vector_rst_inv_ff;
+assign vec_rst_inv_req = vec_sm_reset & ~vector_rst_inv_ff;//通过寄存器产生reset无效缓存信号请求
 
 always @(posedge ifu_xx_warm_up_clk or negedge cpurst_b)
 begin
@@ -403,17 +404,17 @@ begin
     warm_up_cnt[2:0] <= warm_up_cnt[2:0];
 end
 
-assign warm_up_cnt_done = warm_up_cnt[2:0] == 3'b111;
+assign warm_up_cnt_done = warm_up_cnt[2:0] == 3'b111;//复位后需要预热8个周期
 
 //------------------------------------------------
-// 4. Generate Change Flow for non-vec and vec pc fetch
+// 4. Generate Change Flow for non-vec and vec pc fetch|矢量中断与非矢量中断，处理过程不同
 //------------------------------------------------
 // chgflw vld when expt vld or pc load or vector error
 assign vec_chgflw_vld      = vec_sm_pcload;
-assign vec_chgflw_pc[31:0] = cp0_ifu_mtvec[31:0];
+assign vec_chgflw_pc[31:0] = cp0_ifu_mtvec[31:0];//所有的异常入口都由mtvec指定
 
 //------------------------------------------------
-// 5. Generate vec table data fetch
+// 5. Generate vec table data fetch |从中断向量表获取数据，中断的入口和行为在中断向量表查询
 // a. Update pcgen addr flop on vector prepare
 // b. Mask ibuf inst fetch on vector prepare
 // c. Date fetch request on vector request
@@ -432,10 +433,10 @@ assign vec_data_fetch = vec_sm_vec_req;
 
 // d. Flop chgflw pc on vector complete
 assign vec_pc_flop    = vec_sm_vec_wfc & ifetch_vec_cmplt   
-                     & ~ifetch_vec_acc_err;
+                     & ~ifetch_vec_acc_err;//等待完成状态且ifetch完成且不出错
 
 // e. Chgflw pc to bju pcgen and fetch inst.
-assign vec_inst_fetch = vec_sm_vec_cmpt;
+assign vec_inst_fetch = vec_sm_vec_cmpt;//完成后将恢复到正常的bju的取指流并进行取指
 
 // e. Vec Error Occur
 assign vec_err_occur  = vec_sm_vec_wfc & ifetch_vec_cmplt
@@ -469,7 +470,7 @@ assign vec_ifetch_data_fetch  = vec_data_fetch;
 assign vec_ibuf_warm_up       = vec_sm_warm_up;
 
 // Output to vec
-assign vec_ipack_inst_mask    = vec_seq_mask;
+assign vec_ipack_inst_mask    = vec_seq_mask;//防止异常指令进入打包状态？
 
 // Output to top
 assign vec_top_cur_st[3:0]    = vec_cur_state[3:0];
@@ -493,7 +494,7 @@ assign ifu_sysmap_rst_sample     = vec_rst_inv_req;
 // Output to rtu
 assign ifu_rtu_reset_halt_req = vec_cur_state[3:0] == HALT;
 
-assign ifu_cp0_vec_succeed       = vec_pc_flop;
+assign ifu_cp0_vec_succeed       = vec_pc_flop;//成功获取地址后，可将minhv寄存器恢复为0
 assign ifu_cp0_vec_err           = vec_err_occur;
 
 assign ifu_xx_in_warm_up      = vec_sm_warm_up;

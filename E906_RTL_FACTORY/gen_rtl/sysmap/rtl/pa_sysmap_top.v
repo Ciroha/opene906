@@ -54,7 +54,7 @@ input           cp0_pmp_icg_en;
 input           cp0_yy_clk_en;            
 input           cpurst_b;                 
 input           forever_cpuclk;           
-input   [31:0]  ifu_sysmap_pa;            
+input   [31:0]  ifu_sysmap_pa;            //从IFU传来的需要指令的PC地址
 input           ifu_sysmap_rst_sample;    
 input   [31:0]  lsu_sysmap_pa;            
 input   [19:0]  pad_cpu_sysmap_addr0;     

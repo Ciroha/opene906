@@ -133,7 +133,7 @@ wire            rtu_yy_xx_dbgon;
 // information and oper prepare information,
 // all values are defined by parameter.
 // Reliazed Packages: MCU-Ext, Encryption-Ext, Cache-ops-Ext
-assign decd_op_ext[6:0] = 7'b0001011;
+assign decd_op_ext[6:0] = 7'b0001011; //以0001011结尾的是玄铁自定义的拓展指令
 
 // &CombBeg; @42
 always @( decd_sync_func[19:0]
